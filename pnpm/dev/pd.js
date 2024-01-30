@@ -2,6 +2,7 @@
 const fs = require('fs')
 const esbuild = require('esbuild')
 const pathLib = require('path')
+const {createRequire} = require('module')
 const { findWorkspacePackagesNoCheck } = require('@pnpm/workspace.find-packages')
 const { findWorkspaceDir } = require('@pnpm/find-workspace-dir')
 
@@ -17,7 +18,8 @@ const pnpmPackageJson = JSON.parse(fs.readFileSync(pathLib.join(__dirname, 'pack
   })
 
   // This plugin rewrites imports to reference the `src` dir instead of `lib` so
-  // esbuild can compile the original TypeScript
+  // esbuild can compile the original TypeScript. Additionally, it helps resolve
+  // an aliased import for js-yaml.
   const spnpmImportsPlugin = {
     name: 'spnpmImports',
     setup: (build) => {
@@ -31,6 +33,15 @@ const pnpmPackageJson = JSON.parse(fs.readFileSync(pathLib.join(__dirname, 'pack
         const newPath = pathLib.resolve(dirByPackageName[path], 'src', 'index.ts')
         return {
           path: newPath
+        }
+      })
+
+      build.onResolve({filter: /js-yaml/}, ({ path, resolveDir }) => {
+        if (path === 'js-yaml') {
+          // Force esbuild to use node's resolution of js-yaml, since it seems
+          // to understand how pnpm sets up the alias.
+          const resolvedJsYaml = createRequire(resolveDir).resolve('js-yaml')
+          return { path: resolvedJsYaml }
         }
       })
     }
